@@ -16,6 +16,9 @@ body{margin:0;font-family:-apple-system,"Segoe UI","PingFang SC","Hiragino Sans 
 header{background:#16283c;color:#fff;padding:16px 24px}
 header h1{margin:0;font-size:19px}
 header p{margin:4px 0 0;color:#9fb4c8;font-size:12.5px}
+header .headrow{display:flex;align-items:baseline;gap:18px;flex-wrap:wrap}
+header nav a{color:#cfe0f2;font-size:13px;text-decoration:none;border:1px solid #3a5570;border-radius:6px;padding:4px 12px}
+header nav a:hover{background:#22374f}
 main{max-width:1180px;margin:0 auto;padding:18px 16px 40px}
 details.help{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 16px;margin-bottom:16px;font-size:13.5px}
 details.help summary{cursor:pointer;font-weight:600}
@@ -61,7 +64,13 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:16px}
 </head>
 <body>
 <header>
-  <h1>防火墙变更上线前检查</h1>
+  <div class="headrow">
+    <h1>防火墙变更上线前检查</h1>
+    <nav>
+      <a href="/">防火墙检查</a>
+      <a href="/vault">凭据保管</a>
+    </nav>
+  </div>
   <p>精确对比新旧规则，找出新规则意外放开的流量 · 首条匹配生效，未匹配默认拒绝 · 全地址/端口空间精确判定（非抽样）</p>
 </header>
 <main>

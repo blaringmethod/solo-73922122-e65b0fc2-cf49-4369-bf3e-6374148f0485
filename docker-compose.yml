@@ -1,7 +1,31 @@
+# 两个服务进程共享同一数据卷（SQLite + 主密钥文件），
+# 用于演示并发读写、轮换与后台迁移在多进程下仍然成立。
 services:
-  firewall-diff:
+  app1:
     build: .
-    container_name: firewall-diff
+    container_name: vault-app1
     ports:
       - "8000:8000"
+    environment:
+      VAULT_DATA_DIR: /data
+      VAULT_USER: ops            # 固定本地演示账户
+      VAULT_PASSWORD: demo1234   # 演示口令，生产请用环境变量覆盖
+    volumes:
+      - vault-data:/data
     restart: unless-stopped
+
+  app2:
+    build: .
+    container_name: vault-app2
+    ports:
+      - "8001:8000"
+    environment:
+      VAULT_DATA_DIR: /data
+      VAULT_USER: ops
+      VAULT_PASSWORD: demo1234
+    volumes:
+      - vault-data:/data
+    restart: unless-stopped
+
+volumes:
+  vault-data:

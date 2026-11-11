@@ -1,8 +1,11 @@
-"""FastAPI 入口：提供页面与防火墙变更差集计算接口。"""
+"""FastAPI 入口：防火墙变更差集计算接口 + 凭据保管页。"""
 
 from __future__ import annotations
 
 import ipaddress
+import logging
+import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -11,15 +14,44 @@ from fastapi.responses import FileResponse, JSONResponse
 from .example import NEW_EXAMPLE, OLD_EXAMPLE
 from .firewall import (ComplexityError, ValidationError, analyze,
                        validate_rulesets)
+from .vault import MigrationSupervisor, Vault, load_or_create_secret
+from .vault_web import create_router
+
+logging.basicConfig(level=logging.INFO)
 
 BASE_DIR = Path(__file__).resolve().parent
 
-app = FastAPI(title="防火墙变更上线前检查")
+# 凭据保管库：数据目录（SQLite + 主密钥文件）通过环境变量配置，
+# 多进程部署时指向同一共享卷。
+DATA_DIR = Path(os.environ.get("VAULT_DATA_DIR", "./data"))
+VAULT_USER = os.environ.get("VAULT_USER", "ops")
+VAULT_PASSWORD = os.environ.get("VAULT_PASSWORD", "demo1234")
+
+vault = Vault(DATA_DIR)
+session_secret = load_or_create_secret(DATA_DIR / "keys" / "session.secret")
+supervisor = MigrationSupervisor(vault)
+
+
+@asynccontextmanager
+async def lifespan(_app):
+    supervisor.start()      # 后台迁移：进行中的轮换继续逐条迁移（含重启续迁）
+    yield
+    supervisor.stop()
+
+
+app = FastAPI(title="防火墙变更上线前检查 · 凭据保管", lifespan=lifespan)
+app.include_router(create_router(vault, VAULT_USER, VAULT_PASSWORD,
+                                 session_secret))
 
 
 @app.get("/", include_in_schema=False)
 def index():
     return FileResponse(BASE_DIR / "static" / "index.html")
+
+
+@app.get("/vault", include_in_schema=False)
+def vault_page():
+    return FileResponse(BASE_DIR / "static" / "vault.html")
 
 
 @app.get("/api/example")

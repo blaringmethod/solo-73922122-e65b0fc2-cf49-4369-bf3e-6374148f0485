@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>凭据保管 · 连接配置凭据</title>
+<style>
+:root{
+  --bg:#f2f5f8; --card:#ffffff; --ink:#1c2530; --muted:#5b6b7b; --line:#d9e0e7;
+  --ok:#157347; --okbg:#eaf6ef; --okline:#bfe6cf;
+  --bad:#b02a37; --badbg:#fdeeee; --badline:#f2c4c9;
+  --warn:#8a5a00; --warnbg:#fff6e0; --warnline:#eed9a0;
+  --accent:#0b5ed7; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink)}
+header{background:#16283c;color:#fff;padding:16px 24px;display:flex;align-items:baseline;gap:18px;flex-wrap:wrap}
+header h1{margin:0;font-size:19px}
+header p{margin:4px 0 0;color:#9fb4c8;font-size:12.5px;width:100%}
+header nav a{color:#cfe0f2;font-size:13px;text-decoration:none;border:1px solid #3a5570;border-radius:6px;padding:4px 12px}
+header nav a:hover{background:#22374f}
+main{max-width:1080px;margin:0 auto;padding:18px 16px 40px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 18px;margin:12px 0}
+.card h2{margin:0 0 10px;font-size:15.5px}
+.hidden{display:none !important}
+button{border:1px solid var(--line);background:#fff;border-radius:6px;padding:8px 16px;font-size:13.5px;cursor:pointer;color:var(--ink)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+button.danger{background:#fff;border-color:var(--badline);color:var(--bad)}
+button:hover{filter:brightness(.94)}
+button:disabled{opacity:.5;cursor:not-allowed}
+input,textarea{width:100%;border:1px solid var(--line);border-radius:6px;padding:9px 11px;font-size:13.5px;background:#fbfcfe;color:var(--ink)}
+textarea{font-family:var(--mono);font-size:12.5px;min-height:110px;resize:vertical;line-height:1.55}
+label{display:block;font-size:12.5px;color:var(--muted);margin:10px 0 4px}
+.row{display:flex;gap:12px;flex-wrap:wrap}
+.row>div{flex:1;min-width:220px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:12px 0}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px 16px}
+.stat .k{font-size:12px;color:var(--muted)}
+.stat .v{font-size:20px;font-weight:700;margin-top:2px;font-family:var(--mono)}
+.stat .v small{font-size:12px;color:var(--muted);font-weight:400}
+.chips{margin-top:4px}
+.chip{display:inline-block;font-family:var(--mono);font-size:11.5px;border:1px solid var(--line);border-radius:10px;padding:1px 9px;margin:2px 3px 0 0;background:#f0f3f7}
+.chip.cur{background:var(--okbg);border-color:var(--okline);color:var(--ok);font-weight:700}
+.msg{border-radius:6px;padding:8px 12px;margin:8px 0;font-size:13.5px}
+.msg.err{background:var(--badbg);border:1px solid var(--badline);color:#7a1c25}
+.msg.ok{background:var(--okbg);border:1px solid var(--okline);color:var(--ok)}
+.progress{height:14px;background:#e8edf2;border-radius:7px;overflow:hidden;margin:8px 0}
+.progress>div{height:100%;background:var(--accent);width:0%;transition:width .3s}
+.rotstatus{font-size:13.5px;margin:6px 0}
+.rotstatus .mono{font-family:var(--mono)}
+table.list{width:100%;border-collapse:collapse;margin-top:6px}
+table.list th,table.list td{border-bottom:1px solid var(--line);padding:7px 10px;font-size:13px;text-align:left}
+table.list th{background:#f0f3f7;font-size:12.5px;color:var(--muted)}
+table.list td.mono{font-family:var(--mono);font-size:12px}
+table.list td.actions{white-space:nowrap;text-align:right}
+table.list td.actions button{padding:4px 10px;font-size:12.5px;margin-left:6px}
+.reveal{background:#f6f8fa;border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin-top:10px}
+.reveal pre{font-family:var(--mono);font-size:12.5px;white-space:pre-wrap;word-break:break-all;margin:6px 0 0;max-height:220px;overflow:auto}
+.hint{color:var(--muted);font-size:12px;margin-top:6px}
+.count{font-size:12px;color:var(--muted);float:right}
+.count.over{color:var(--bad);font-weight:700}
+footer{color:var(--muted);font-size:12px;text-align:center;padding:16px}
+.badge{display:inline-block;font-size:12px;border-radius:10px;padding:1px 10px;font-weight:600;vertical-align:middle}
+.badge.ok{background:var(--okbg);color:var(--ok)}
+.badge.run{background:var(--warnbg);color:var(--warn)}
+</style>
+</head>
+<body>
+<header>
+  <h1>凭据保管</h1>
+  <nav>
+    <a href="/">防火墙检查</a>
+    <a href="/vault">凭据保管</a>
+  </nav>
+  <p>连接配置凭据的加密存取与主密钥在线轮换 · AES-256-GCM · 密文 + 随机 nonce + 密钥版本入库，明文绝不落盘</p>
+</header>
+<main>
+  <!-- 登录 -->
+  <div class="card" id="loginCard">
+    <h2>登录（固定本地演示账户）</h2>
+    <div class="row">
+      <div>
+        <label>用户名</label>
+        <input id="loginUser" autocomplete="username" value="ops">
+      </div>
+      <div>
+        <label>口令</label>
+        <input id="loginPass" type="password" autocomplete="current-password" placeholder="演示账户口令">
+      </div>
+    </div>
+    <div style="margin-top:12px">
+      <button class="primary" id="btnLogin">登录</button>
+      <span class="hint" style="display:inline-block;margin-left:10px">演示账户见 README / docker-compose.yml（默认 ops / demo1234）</span>
+    </div>
+    <div id="loginMsg"></div>
+  </div>
+
+  <div id="mainArea" class="hidden">
+    <!-- 状态总览 -->
+    <div class="stats">
+      <div class="stat"><div class="k">当前主密钥版本</div><div class="v" id="stVersion">-</div></div>
+      <div class="stat"><div class="k">凭据数量</div><div class="v" id="stCount">-</div></div>
+      <div class="stat"><div class="k">磁盘上的密钥文件</div><div class="chips" id="stKeys"></div></div>
+    </div>
+
+    <!-- 轮换 -->
+    <div class="card">
+      <h2>主密钥轮换 <span id="rotBadge"></span></h2>
+      <div class="rotstatus" id="rotStatus">正在读取状态…</div>
+      <div class="progress"><div id="rotBar"></div></div>
+      <button class="primary" id="btnRotate">轮换主密钥</button>
+      <button id="btnLogout" style="float:right">退出登录</button>
+      <div class="hint">轮换先启用新主密钥（新写入只用新钥），随后后台逐条迁移旧记录；迁移期间读写照常。
+        全部记录迁移完成且确认无旧钥引用后，旧钥文件才会被移除。同一时刻只允许一轮轮换。</div>
+      <div id="rotMsg"></div>
+    </div>
+
+    <!-- 保存凭据 -->
+    <div class="card">
+      <h2>保存凭据</h2>
+      <label>连接名（同一连接名重复保存即覆盖更新）</label>
+      <input id="credName" maxlength="128" placeholder="例如：core-switch-01">
+      <label>凭据内容 <span class="count" id="secretCount">0 / 4096 字节</span></label>
+      <textarea id="credSecret" spellcheck="false" placeholder="凭据明文仅用于本次加密传输，服务器只保存密文"></textarea>
+      <div style="margin-top:10px">
+        <button class="primary" id="btnSave">加密保存</button>
+        <span class="hint" style="margin-left:10px">AES-256-GCM 加密后入库：密文 + 随机 nonce + 密钥版本；每条 ≤ 4KiB，最多 1000 条</span>
+      </div>
+      <div id="saveMsg"></div>
+    </div>
+
+    <!-- 凭据列表 -->
+    <div class="card">
+      <h2>已保存的连接 <span class="hint" id="listHint"></span></h2>
+      <table class="list">
+        <thead><tr><th>连接名</th><th>密钥版本</th><th>密文大小</th><th>更新时间</th><th style="text-align:right">操作</th></tr></thead>
+        <tbody id="credRows"><tr><td colspan="5" class="hint">加载中…</td></tr></tbody>
+      </table>
+      <div id="revealBox" class="reveal hidden">
+        <b id="revealName"></b> 的凭据明文：
+        <button id="btnHideReveal" style="float:right;padding:2px 10px;font-size:12px">隐藏</button>
+        <pre id="revealSecret"></pre>
+      </div>
+      <div id="listMsg"></div>
+    </div>
+  </div>
+</main>
+<footer>凭据明文只存在于内存与本次响应中，不写入数据库或日志 · 旧钥文件在确认无引用后才移除</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let pollTimer = null;
+
+function esc(s){
+  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function showMsg(el, text, ok){
+  el.innerHTML = text ? `<div class="msg ${ok ? "ok" : "err"}">${esc(text)}</div>` : "";
+}
+async function api(path, opts){
+  const res = await fetch(path, opts);
+  let data = null;
+  try { data = await res.json(); } catch(e) {}
+  if (res.status === 401){ showLogin(); throw new Error((data && data.error) || "未登录"); }
+  return {status: res.status, data};
+}
+function byteLen(s){ return new TextEncoder().encode(s).length; }
+function fmtTime(ts){ return ts ? new Date(ts * 1000).toLocaleString() : "-"; }
+
+function showLogin(){
+  $("loginCard").classList.remove("hidden");
+  $("mainArea").classList.add("hidden");
+  stopPoll();
+}
+function showMain(){
+  $("loginCard").classList.add("hidden");
+  $("mainArea").classList.remove("hidden");
+  refreshAll();
+  startPoll();
+}
+
+$("btnLogin").onclick = async () => {
+  showMsg($("loginMsg"), "");
+  const {status, data} = await api("/api/vault/login", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({username: $("loginUser").value, password: $("loginPass").value})
+  });
+  if (data && data.ok){ $("loginPass").value = ""; showMain(); }
+  else showMsg($("loginMsg"), (data && data.error) || `登录失败（HTTP ${status}）`);
+};
+$("loginPass").addEventListener("keydown", e => { if (e.key === "Enter") $("btnLogin").click(); });
+
+$("btnLogout").onclick = async () => { await api("/api/vault/logout", {method: "POST"}); showLogin(); };
+
+async function refreshState(){
+  let st;
+  try { st = (await api("/api/vault/state")).data; }
+  catch(e){ return; }
+  if (!st || !st.ok) return;
+  $("stVersion").textContent = "v" + st.active_version;
+  $("stCount").innerHTML = `${st.records} <small>/ ${st.max_records} 条</small>`;
+  $("stKeys").innerHTML = st.keys_on_disk.map(v =>
+    `<span class="chip ${v === st.active_version ? "cur" : ""}">v${v}${v === st.active_version ? " 当前" : ""}</span>`).join("")
+    || '<span class="hint">无</span>';
+
+  const rot = st.rotation;
+  const bar = $("rotBar"), badge = $("rotBadge"), btn = $("btnRotate");
+  if (rot && rot.status === "running"){
+    const done = rot.migrated_count, left = rot.remaining;
+    const total = done + left;
+    const pct = total ? Math.round(done * 100 / total) : 100;
+    bar.style.width = pct + "%";
+    badge.innerHTML = '<span class="badge run">轮换进行中</span>';
+    $("rotStatus").innerHTML =
+      `正在轮换 <span class="mono">v${rot.from_version} → v${rot.to_version}</span>：` +
+      `已迁移 <b>${done}</b> 条，剩余 <b>${left}</b> 条（${pct}%）。读写与新的保存不受影响。`;
+    btn.disabled = true;
+  } else {
+    badge.innerHTML = '<span class="badge ok">空闲</span>';
+    if (rot && rot.status === "done"){
+      bar.style.width = "100%";
+      $("rotStatus").innerHTML =
+        `上一轮轮换 <span class="mono">v${rot.from_version} → v${rot.to_version}</span> 已完成，` +
+        `共迁移 ${rot.migrated_count} 条，完成于 ${fmtTime(rot.finished_at)}。`;
+    } else {
+      bar.style.width = "0%";
+      $("rotStatus").textContent = "尚未进行过轮换。";
+    }
+    btn.disabled = false;
+  }
+}
+
+async function refreshList(){
+  let data;
+  try { data = (await api("/api/vault/credentials")).data; }
+  catch(e){ return; }
+  if (!data || !data.ok) return;
+  $("listHint").textContent = `（${data.items.length} 条）`;
+  const tb = $("credRows");
+  if (!data.items.length){
+    tb.innerHTML = '<tr><td colspan="5" class="hint">暂无凭据，请在上方保存。</td></tr>';
+    return;
+  }
+  tb.innerHTML = data.items.map(it => `<tr>
+    <td class="mono">${esc(it.name)}</td>
+    <td class="mono">v${it.key_version}</td>
+    <td class="mono">${it.size} B</td>
+    <td class="mono">${fmtTime(it.updated_at)}</td>
+    <td class="actions">
+      <button data-act="view" data-name="${esc(it.name)}">查看</button>
+      <button class="danger" data-act="del" data-name="${esc(it.name)}">删除</button>
+    </td></tr>`).join("");
+}
+
+async function refreshAll(){ refreshState(); refreshList(); }
+function startPoll(){
+  stopPoll();
+  pollTimer = setInterval(refreshAll, 1500);
+}
+function stopPoll(){ if (pollTimer){ clearInterval(pollTimer); pollTimer = null; } }
+
+$("btnRotate").onclick = async () => {
+  if (!confirm("确认开始轮换主密钥？\n新写入将立即使用新钥，旧记录由后台逐条迁移，期间读写不受影响。")) return;
+  showMsg($("rotMsg"), "");
+  const {status, data} = await api("/api/vault/rotate", {method: "POST"});
+  if (data && data.ok){
+    showMsg($("rotMsg"), `轮换已开始：v${data.from_version} → v${data.to_version}，后台迁移中…`, true);
+  } else {
+    showMsg($("rotMsg"), (data && data.error) || `轮换失败（HTTP ${status}）`);
+  }
+  refreshState();
+};
+
+$("credSecret").addEventListener("input", () => {
+  const n = byteLen($("credSecret").value);
+  const el = $("secretCount");
+  el.textContent = `${n} / 4096 字节`;
+  el.classList.toggle("over", n > 4096);
+});
+
+$("btnSave").onclick = async () => {
+  showMsg($("saveMsg"), "");
+  const name = $("credName").value, secret = $("credSecret").value;
+  if (!name){ showMsg($("saveMsg"), "请填写连接名"); return; }
+  if (byteLen(secret) > 4096){ showMsg($("saveMsg"), "凭据内容超过 4KiB 上限"); return; }
+  const {status, data} = await api("/api/vault/credentials", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({name, secret})
+  });
+  if (data && data.ok){
+    showMsg($("saveMsg"), `已加密保存：${name}`, true);
+    $("credSecret").value = ""; $("secretCount").textContent = "0 / 4096 字节";
+    refreshAll();
+  } else {
+    showMsg($("saveMsg"), (data && data.error) || `保存失败（HTTP ${status}）`);
+  }
+};
+
+$("credRows").addEventListener("click", e => {
+  const btn = e.target.closest("button[data-act]");
+  if (!btn) return;
+  const name = btn.dataset.name;
+  if (btn.dataset.act === "view") viewCred(name);
+  else if (btn.dataset.act === "del") delCred(name);
+});
+
+async function viewCred(name){
+  const {status, data} = await api("/api/vault/credentials/" + encodeURIComponent(name));
+  if (data && data.ok){
+    $("revealName").textContent = data.name;
+    $("revealSecret").textContent = data.secret;
+    $("revealBox").classList.remove("hidden");
+  } else {
+    showMsg($("listMsg"), (data && data.error) || `读取失败（HTTP ${status}）`);
+  }
+}
+$("btnHideReveal").onclick = () => {
+  $("revealBox").classList.add("hidden");
+  $("revealSecret").textContent = "";
+};
+
+async function delCred(name){
+  if (!confirm(`确认删除连接「${name}」的凭据？`)) return;
+  const {status, data} = await api("/api/vault/credentials/" + encodeURIComponent(name),
+                                   {method: "DELETE"});
+  if (data && data.ok){ showMsg($("listMsg"), `已删除：${name}`, true); refreshAll(); }
+  else showMsg($("listMsg"), (data && data.error) || `删除失败（HTTP ${status}）`);
+}
+
+// 初始：探测会话是否仍有效
+(async () => {
+  try {
+    const {data} = await api("/api/vault/state");
+    if (data && data.ok) showMain(); else showLogin();
+  } catch(e){ showLogin(); }
+})();
+</script>
+</body>
+</html>
