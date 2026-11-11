@@ -1,0 +1,7 @@
+services:
+  firewall-diff:
+    build: .
+    container_name: firewall-diff
+    ports:
+      - "8000:8000"
+    restart: unless-stopped

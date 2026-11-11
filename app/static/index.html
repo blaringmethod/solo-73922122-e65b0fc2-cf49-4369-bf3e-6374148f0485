@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>防火墙变更上线前检查</title>
+<style>
+:root{
+  --bg:#f2f5f8; --card:#ffffff; --ink:#1c2530; --muted:#5b6b7b; --line:#d9e0e7;
+  --ok:#157347; --okbg:#eaf6ef; --okline:#bfe6cf;
+  --bad:#b02a37; --badbg:#fdeeee; --badline:#f2c4c9;
+  --accent:#0b5ed7; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink)}
+header{background:#16283c;color:#fff;padding:16px 24px}
+header h1{margin:0;font-size:19px}
+header p{margin:4px 0 0;color:#9fb4c8;font-size:12.5px}
+main{max-width:1180px;margin:0 auto;padding:18px 16px 40px}
+details.help{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 16px;margin-bottom:16px;font-size:13.5px}
+details.help summary{cursor:pointer;font-weight:600}
+details.help table{border-collapse:collapse;margin:8px 0}
+details.help td,details.help th{border:1px solid var(--line);padding:4px 12px;font-size:12.5px;text-align:left}
+details.help th{background:#f0f3f7}
+details.help pre{background:#f6f8fa;border:1px solid var(--line);border-radius:6px;padding:10px;overflow:auto;font-size:12px}
+.panels{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:900px){.panels{grid-template-columns:1fr}}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.panel h2{margin:0 0 8px;font-size:15px}
+.panel .hint{color:var(--muted);font-size:12px;margin:6px 2px 0}
+textarea{width:100%;min-height:320px;font-family:var(--mono);font-size:12.5px;line-height:1.55;border:1px solid var(--line);border-radius:6px;padding:10px;resize:vertical;background:#fbfcfe;color:var(--ink)}
+textarea.invalid{border-color:var(--bad);background:#fff7f7}
+.toolbar{display:flex;gap:10px;margin:16px 0;flex-wrap:wrap;align-items:center}
+button{border:1px solid var(--line);background:#fff;border-radius:6px;padding:9px 18px;font-size:14px;cursor:pointer;color:var(--ink)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+button:hover{filter:brightness(.94)}
+.toolbar .note{color:var(--muted);font-size:12.5px}
+#errors{margin:0 0 14px}
+.err{background:var(--badbg);border:1px solid var(--badline);border-left:4px solid var(--bad);color:#7a1c25;border-radius:6px;padding:8px 12px;margin:6px 0;font-size:13.5px}
+.err .loc{font-weight:700;margin-right:8px}
+.summary{border-radius:8px;padding:12px 16px;margin:0 0 14px;font-size:15px;font-weight:600}
+.summary.ok{background:var(--okbg);color:var(--ok);border:1px solid var(--okline)}
+.summary.bad{background:var(--badbg);color:var(--bad);border:1px solid var(--badline)}
+.summary .sub{font-weight:400;font-size:12.5px;margin-top:4px;color:var(--muted)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px 16px;margin:10px 0}
+.card.opened{border-left:5px solid var(--bad)}
+.card.safe{border-left:5px solid var(--ok)}
+.card h3{margin:0 0 6px;font-size:14.5px}
+.badge{display:inline-block;font-size:12px;border-radius:10px;padding:1px 10px;margin-left:8px;vertical-align:middle;font-weight:600}
+.badge.ok{background:var(--okbg);color:var(--ok)}
+.badge.bad{background:var(--badbg);color:var(--bad)}
+.ruletext{font-family:var(--mono);font-size:12.5px;background:#f0f3f7;border-radius:4px;padding:2px 6px;word-break:break-all}
+.comment{color:var(--muted);font-size:12.5px}
+table.wit{border-collapse:collapse;margin:8px 0}
+table.wit td,table.wit th{border:1px solid var(--line);padding:5px 16px;font-size:13.5px;text-align:left;font-family:var(--mono)}
+table.wit th{background:#f0f3f7;font-family:inherit}
+.hit{font-size:13.5px;margin:6px 0 2px}
+.hit .arrow{color:var(--muted);margin:0 6px}
+footer{color:var(--muted);font-size:12px;text-align:center;padding:16px}
+</style>
+</head>
+<body>
+<header>
+  <h1>防火墙变更上线前检查</h1>
+  <p>精确对比新旧规则，找出新规则意外放开的流量 · 首条匹配生效，未匹配默认拒绝 · 全地址/端口空间精确判定（非抽样）</p>
+</header>
+<main>
+  <details class="help">
+    <summary>规则格式与判定方法说明（点击展开）</summary>
+    <p>每侧规则集是一个 <b>JSON 数组</b>（最多 30 条），规则<b>按顺序匹配，首条命中生效</b>；未命中任何规则的流量<b>默认拒绝</b>。每条规则是一个 JSON 对象：</p>
+    <table>
+      <tr><th>字段</th><th>含义</th><th>取值</th></tr>
+      <tr><td>src</td><td>源地址</td><td>IPv4 CIDR，如 <code>"10.0.0.0/8"</code>；单主机可写 <code>"10.0.0.1"</code>（等同 /32）；<code>"0.0.0.0/0"</code> 表示任意</td></tr>
+      <tr><td>dst</td><td>目的地址</td><td>同上</td></tr>
+      <tr><td>proto</td><td>协议</td><td><code>"tcp"</code> 或 <code>"udp"</code>（不区分大小写）</td></tr>
+      <tr><td>ports</td><td>目的端口闭区间</td><td><code>[下界, 上界]</code>，如 <code>[80, 443]</code>；单端口可写 <code>[80, 80]</code> 或 <code>80</code>；范围 0–65535</td></tr>
+      <tr><td>action</td><td>动作</td><td><code>"allow"</code> 或 <code>"deny"</code></td></tr>
+      <tr><td>comment</td><td>备注（可选）</td><td>字符串</td></tr>
+    </table>
+    <p>示例：</p>
+    <pre>[{"src":"0.0.0.0/0","dst":"10.0.0.10/32","proto":"tcp","ports":[443,443],"action":"allow","comment":"HTTPS"}]</pre>
+    <p><b>判定方法：</b>把每条规则看作 (源IP, 目的IP, 端口) 空间中的长方体，TCP/UDP 分别对新旧规则集做精确的
+    长方体差集运算，覆盖全部 2³² × 2³² × 65536 × 2 种组合，<b>不使用抽样</b>。对每条新 allow 规则，
+    在其“实际生效区域”（扣除顺序在前的规则遮蔽）中检查是否存在被旧规则（含默认拒绝）拒绝的流量；
+    多条规则联合覆盖、规则顺序变化均被正确处理。若存在，给出一个具体的 witness（源/目的 IP、协议、端口）
+    及该流量在新旧两侧各自命中的规则。</p>
+  </details>
+
+  <div class="panels">
+    <div class="panel">
+      <h2>① 旧规则（当前线上）</h2>
+      <textarea id="oldRules" spellcheck="false" placeholder='粘贴旧规则 JSON 数组，例如：
+[
+  {"src":"0.0.0.0/0","dst":"10.0.0.10/32","proto":"tcp","ports":80,"action":"allow"}
+]'></textarea>
+      <div class="hint" id="oldCount"></div>
+    </div>
+    <div class="panel">
+      <h2>② 新规则（待上线）</h2>
+      <textarea id="newRules" spellcheck="false" placeholder='粘贴新规则 JSON 数组'></textarea>
+      <div class="hint" id="newCount"></div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <button id="btnExample">载入变更示例</button>
+    <button id="btnGo" class="primary">开始检查</button>
+    <button id="btnClear">清空</button>
+    <span class="note">每侧最多 30 条；存在非法输入时逐条定位提示，且不会进行计算。</span>
+  </div>
+
+  <div id="errors"></div>
+  <div id="results"></div>
+</main>
+<footer>判定覆盖整个地址与端口空间（精确长方体差集，非抽样）· 仅检查“新放开”的流量，deny 规则不产生放行</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const oldTa = $("oldRules"), newTa = $("newRules");
+
+function esc(s){
+  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+$("btnExample").onclick = async () => {
+  const res = await fetch("/api/example");
+  const data = await res.json();
+  oldTa.value = JSON.stringify(data.old, null, 2);
+  newTa.value = JSON.stringify(data.new, null, 2);
+  clearOutput(); updateCounts();
+};
+
+$("btnClear").onclick = () => { oldTa.value = ""; newTa.value = ""; clearOutput(); updateCounts(); };
+
+function clearOutput(){
+  $("errors").innerHTML = ""; $("results").innerHTML = "";
+  oldTa.classList.remove("invalid"); newTa.classList.remove("invalid");
+}
+
+function updateCounts(){
+  for (const [ta, el] of [[oldTa, $("oldCount")], [newTa, $("newCount")]]){
+    try {
+      const v = JSON.parse(ta.value);
+      el.textContent = Array.isArray(v) ? `共 ${v.length} 条规则` : "（不是 JSON 数组）";
+    } catch(e){ el.textContent = ""; }
+  }
+}
+oldTa.addEventListener("input", updateCounts);
+newTa.addEventListener("input", updateCounts);
+
+function showErrors(errors){
+  const box = $("errors");
+  box.innerHTML = errors.map(e => {
+    let loc = "输入错误";
+    if (e.side) loc = (e.side === "old" ? "旧规则" : "新规则") + (e.rule ? ` 第 ${e.rule} 条` : "");
+    return `<div class="err"><span class="loc">${esc(loc)}</span>${esc(e.message)}</div>`;
+  }).join("");
+  box.scrollIntoView({behavior:"smooth", block:"nearest"});
+}
+
+$("btnGo").onclick = async () => {
+  clearOutput();
+  let oldData, newData, bad = false;
+  const parseErrs = [];
+  try { oldData = JSON.parse(oldTa.value); }
+  catch(e){ parseErrs.push({side:"old", rule:null, message:"JSON 语法错误：" + e.message}); oldTa.classList.add("invalid"); bad = true; }
+  try { newData = JSON.parse(newTa.value); }
+  catch(e){ parseErrs.push({side:"new", rule:null, message:"JSON 语法错误：" + e.message}); newTa.classList.add("invalid"); bad = true; }
+  if (bad){ showErrors(parseErrs); return; }
+
+  let data;
+  try {
+    const res = await fetch("/api/diff", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({old: oldData, new: newData})
+    });
+    data = await res.json();
+  } catch(e){
+    showErrors([{side:null, rule:null, message:"请求失败：" + e.message}]);
+    return;
+  }
+  if (!data.ok){
+    if (data.errors.some(e => e.side === "old")) oldTa.classList.add("invalid");
+    if (data.errors.some(e => e.side === "new")) newTa.classList.add("invalid");
+    showErrors(data.errors);
+    return;
+  }
+  renderResults(data);
+};
+
+function renderResults(data){
+  const s = data.stats;
+  const box = $("results");
+  let html = "";
+  if (s.opened_rules === 0){
+    html += `<div class="summary ok">✓ 未发现意外放开的流量：新规则中的 ${s.allow_rules_checked} 条 allow 规则均未放行任何旧规则（含默认拒绝）所拒绝的流量。
+      <div class="sub">旧规则 ${s.old_rules} 条，新规则 ${s.new_rules} 条（其中 deny ${s.new_deny_rules} 条，deny 不产生放行）。判定覆盖整个地址与端口空间，非抽样。</div></div>`;
+  } else {
+    html += `<div class="summary bad">⚠ 发现 ${s.opened_rules} 条新 allow 规则放开了旧规则（含默认拒绝）所拒绝的流量（共检查 ${s.allow_rules_checked} 条 allow 规则）。
+      <div class="sub">旧规则 ${s.old_rules} 条，新规则 ${s.new_rules} 条（其中 deny ${s.new_deny_rules} 条）。下列每条给出具体 witness 流量及两侧命中规则；判定覆盖整个地址与端口空间，非抽样。</div></div>`;
+  }
+  for (const f of data.findings){
+    const comment = f.comment ? ` <span class="comment">（${esc(f.comment)}）</span>` : "";
+    if (!f.opened){
+      html += `<div class="card safe">
+        <h3>新规则 #${f.rule_index}<span class="badge ok">无新增放行</span></h3>
+        <div><span class="ruletext">${esc(f.rule_text)}</span>${comment}</div>
+        <div class="hit">该规则未放行任何旧规则（含默认拒绝）所拒绝的流量。</div>
+      </div>`;
+    } else {
+      const w = f.witness;
+      let oldHit;
+      if (f.old_match.type === "default_deny"){
+        oldHit = `<b>默认拒绝</b>（未命中任何旧规则）`;
+      } else {
+        const oc = f.old_match.comment ? ` <span class="comment">（${esc(f.old_match.comment)}）</span>` : "";
+        oldHit = `旧规则 #${f.old_match.rule_index} <span class="ruletext">${esc(f.old_match.rule_text)}</span>${oc}`;
+      }
+      html += `<div class="card opened">
+        <h3>新规则 #${f.rule_index}<span class="badge bad">放开了旧规则拒绝的流量</span></h3>
+        <div><span class="ruletext">${esc(f.rule_text)}</span>${comment}</div>
+        <table class="wit">
+          <tr><th>源 IP</th><th>目的 IP</th><th>协议</th><th>目的端口</th></tr>
+          <tr><td>${esc(w.src)}</td><td>${esc(w.dst)}</td><td>${esc(w.proto.toUpperCase())}</td><td>${w.port}</td></tr>
+        </table>
+        <div class="hit">命中情况：<b>新规则 #${f.rule_index}</b>（allow）<span class="arrow">←</span>旧侧为 ${oldHit}</div>
+      </div>`;
+    }
+  }
+  box.innerHTML = html;
+  box.scrollIntoView({behavior:"smooth", block:"nearest"});
+}
+</script>
+</body>
+</html>
